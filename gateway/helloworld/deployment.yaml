@@ -59,8 +59,8 @@ spec:
     spec:
       containers:
         - name: server
-          image: mfordjody/dubbo-go-server:debug
-          imagePullPolicy: Always
+          image: dubboregistry/helloworld-go-server:master
+          imagePullPolicy: IfNotPresent
           ports:
             - name: triple
               containerPort: 20000

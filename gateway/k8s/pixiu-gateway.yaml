@@ -252,10 +252,10 @@ spec:
       serviceAccountName: pixiu-gateway-sa
       containers:
         - name: pixiu-gateway
-          image: mfordjody/pixiugateway-controller:debug
-          imagePullPolicy: Always
+          image: dubboregistry/pixiu-gateway:v1.1.0
+          imagePullPolicy: IfNotPresent
           command:
-            - /usr/local/bin/pg-controller
+            - /usr/local/bin/pixiu-gateway
           args:
             - --config-path=/config/pg.yaml
             - --log-level=info
