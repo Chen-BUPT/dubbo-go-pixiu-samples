@@ -25,8 +25,8 @@ metadata:
   namespace: default
 spec:
   parentRefs:
-    - name: pixiu-listeners
-      namespace: pixiu-gateway-system
+    - name: pixiu
+      namespace: default
       sectionName: http
   rules:
     - matches:
@@ -43,12 +43,12 @@ apiVersion: pixiu.apache.org/v1alpha1
 kind: PixiuClusterPolicy
 metadata:
   name: helloworld-cluster
-  namespace: pixiu-gateway-system
+  namespace: default
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: pixiu-listeners
+    name: pixiu
   clusterRef:
     - name: helloworld-dubbo-go-server
       type: static
@@ -61,12 +61,12 @@ apiVersion: pixiu.apache.org/v1alpha1
 kind: PixiuFilterPolicy
 metadata:
   name: helloworld-http-filter
-  namespace: pixiu-gateway-system
+  namespace: default
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: pixiu-listeners
+    name: pixiu
   listenersRef:
     - name: http
       filterChains:
