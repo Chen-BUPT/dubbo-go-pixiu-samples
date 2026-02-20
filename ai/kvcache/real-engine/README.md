@@ -2,8 +2,6 @@
 
 [Back to KVCache Index](../README.md) | English | [中文](./README_zh.md)
 
-This sample follows the HOWTO-style structure and targets real BYOE integration.
-
 ## Layout
 
 - `pixiu/conf.yaml`: BYOE Pixiu template (env-driven)

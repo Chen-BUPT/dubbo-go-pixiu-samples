@@ -2,8 +2,6 @@
 
 [返回 KVCache 索引](../README_zh.md) | [English](./README.md) | 中文
 
-该示例按 HOWTO 约定组织目录，面向真实 BYOE 集成验证。
-
 ## 目录结构
 
 - `pixiu/conf.yaml`: BYOE Pixiu 模板（环境变量驱动）
