@@ -7,7 +7,7 @@ PIXIU_URL="${PIXIU_URL:-http://127.0.0.1:18888}"
 LMCACHE_ADMIN="${LMCACHE_ADMIN:-http://127.0.0.1:18081}"
 ENGINE_A_ADMIN="${ENGINE_A_ADMIN:-http://127.0.0.1:18091}"
 ENGINE_B_ADMIN="${ENGINE_B_ADMIN:-http://127.0.0.1:18092}"
-PIXIU_SOURCE="${PIXIU_SOURCE:-/home/chen/dubbo-go-pixiu}"
+PIXIU_SOURCE="${PIXIU_SOURCE:-${SCRIPT_DIR}/../../dubbo-go-pixiu}"
 GO_CACHE_DIR="${GO_CACHE_DIR:-/tmp/go-build-cache}"
 GO_MOD_CACHE_DIR="${GO_MOD_CACHE_DIR:-/tmp/go-mod-cache}"
 export NO_PROXY="${NO_PROXY:-127.0.0.1,localhost}"
@@ -73,7 +73,7 @@ wait_for_health() {
 wait_for_pixiu() {
   for _ in $(seq 1 80); do
     local status
-    status="$(curl -s -o /tmp/kvcache-pixiu-ready.out -w '%{http_code}' \
+    status="$(curl -s -o "${WORK_DIR}/kvcache-pixiu-ready.out" -w '%{http_code}' \
       -H 'Content-Type: application/json' \
       -X POST "${PIXIU_URL}/v1/chat/completions" \
       -d "${REQ_BODY}" || true)"

@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package test
 
 import (
@@ -7,9 +24,12 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 )
 
 const defaultBYOEPixiuURL = "http://127.0.0.1:18889"
+
+var testHTTPClient = &http.Client{Timeout: 3 * time.Second}
 
 func envOrDefault(key string, fallback string) string {
 	if v := os.Getenv(key); v != "" {
@@ -23,13 +43,16 @@ func checkPixiuAvailable(url string) bool {
 		"model":  envOrDefault("MODEL_NAME", "Qwen2.5-3B-Instruct"),
 		"prompt": "kvcache byoe availability probe",
 	}
-	data, _ := json.Marshal(payload)
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return false
+	}
 	req, err := http.NewRequest(http.MethodPost, url+"/v1/chat/completions", bytes.NewReader(data))
 	if err != nil {
 		return false
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testHTTPClient.Do(req)
 	if err != nil {
 		return false
 	}
@@ -75,7 +98,7 @@ func TestBYOERequestSmoke(t *testing.T) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testHTTPClient.Do(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}

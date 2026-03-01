@@ -1,11 +1,31 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
 #!/usr/bin/env bash
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PIXIU_SOURCE="${PIXIU_SOURCE:-/home/chen/dubbo-go-pixiu}"
+PIXIU_SOURCE="${PIXIU_SOURCE:-}"
 START_PIXIU="${START_PIXIU:-1}"
 GO_CACHE_DIR="${GO_CACHE_DIR:-/tmp/go-build-cache}"
 GO_MOD_CACHE_DIR="${GO_MOD_CACHE_DIR:-/tmp/go-mod-cache}"
+KEEP_WORK_DIR="${KEEP_WORK_DIR:-0}"
 export NO_PROXY="${NO_PROXY:-127.0.0.1,localhost}"
 export no_proxy="${no_proxy:-127.0.0.1,localhost}"
 
@@ -96,10 +116,15 @@ PIXIU_PID=""
 
 cleanup() {
   set +e
+  local exit_code=$?
   if [[ -n "${PIXIU_PID}" ]] && kill -0 "${PIXIU_PID}" >/dev/null 2>&1; then
     kill "${PIXIU_PID}" >/dev/null 2>&1
     wait "${PIXIU_PID}" >/dev/null 2>&1
   fi
+  if [[ "${KEEP_WORK_DIR}" != "1" && "${exit_code}" -eq 0 && -n "${WORK_DIR:-}" && -d "${WORK_DIR}" ]]; then
+    rm -rf "${WORK_DIR}"
+  fi
+  return "${exit_code}"
 }
 trap cleanup EXIT INT TERM
 
@@ -108,7 +133,7 @@ wait_for_pixiu() {
   body="$(jq -nc --arg model "${MODEL_NAME}" '{model:$model,prompt:"kvcache smoke"}')"
   for _ in $(seq 1 100); do
     local code
-    code="$(curl -s -o /tmp/kvcache-real-ready.out -w '%{http_code}' \
+    code="$(curl -s -o /dev/null -w '%{http_code}' \
       -H 'Content-Type: application/json' \
       -X POST "${PIXIU_URL}/v1/chat/completions" \
       -d "${body}" || true)"
@@ -187,7 +212,8 @@ run_load() {
     body="$(jq -nc --arg model "${MODEL_NAME}" --arg prompt "${prompt}" '{model:$model,messages:[{role:"user",content:$prompt}]}')"
 
     local result
-    result="$(curl -sS -o /tmp/kvcache-real-${mode}.out -w '%{http_code} %{time_total}' \
+    local response_file="${WORK_DIR}/${mode}-${i}.response.out"
+    result="$(curl -sS -o "${response_file}" -w '%{http_code} %{time_total}' \
       -H 'Content-Type: application/json' \
       -X POST "${PIXIU_URL}/v1/chat/completions" \
       -d "${body}")"
@@ -199,7 +225,7 @@ run_load() {
 
     if [[ "${status}" != "200" ]]; then
       echo "request failed in ${mode} mode: status=${status}"
-      cat /tmp/kvcache-real-${mode}.out
+      cat "${response_file}"
       exit 1
     fi
 
@@ -211,25 +237,45 @@ lookup_probe() {
   local tokenize_body
   tokenize_body="$(jq -nc --arg model "${MODEL_NAME}" '{model:$model,prompt:"kvcache lookup probe"}')"
 
-  local tokenize_resp
-  tokenize_resp="$(curl -sS -H 'Content-Type: application/json' -X POST "${VLLM_ENDPOINT}/tokenize" -d "${tokenize_body}")"
+  local tokenize_resp_file="${WORK_DIR}/lookup-probe-tokenize.response.json"
+  local tokenize_status
+  tokenize_status="$(curl -sS -o "${tokenize_resp_file}" -w '%{http_code}' \
+    -H 'Content-Type: application/json' \
+    -X POST "${VLLM_ENDPOINT}/tokenize" \
+    -d "${tokenize_body}")"
+  if [[ "${tokenize_status}" != "200" ]]; then
+    echo "lookup_probe_error: tokenize returned HTTP ${tokenize_status}"
+    cat "${tokenize_resp_file}"
+    exit 1
+  fi
 
   local tokens_json
-  tokens_json="$(jq -c '.tokens // []' <<<"${tokenize_resp}")"
+  tokens_json="$(jq -c 'if type == "object" then (.tokens // []) else [] end' "${tokenize_resp_file}" 2>/dev/null || echo '[]')"
   if [[ "${tokens_json}" == "[]" ]]; then
-    echo "lookup_probe_error: tokenize returned empty tokens"
+    echo "lookup_probe_error: tokenize response did not contain usable tokens"
+    cat "${tokenize_resp_file}"
     exit 1
   fi
 
   local lookup_body
   lookup_body="$(jq -nc --argjson t "${tokens_json}" '{tokens:$t}')"
-  local lookup_resp
-  lookup_resp="$(curl -sS -H 'Content-Type: application/json' -X POST "${LMCACHE_ENDPOINT}/lookup" -d "${lookup_body}")"
+  local lookup_resp_file="${WORK_DIR}/lookup-probe-lookup.response.json"
+  local lookup_status
+  lookup_status="$(curl -sS -o "${lookup_resp_file}" -w '%{http_code}' \
+    -H 'Content-Type: application/json' \
+    -X POST "${LMCACHE_ENDPOINT}/lookup" \
+    -d "${lookup_body}")"
+  if [[ "${lookup_status}" != "200" ]]; then
+    echo "lookup_probe_error: lookup returned HTTP ${lookup_status}"
+    cat "${lookup_resp_file}"
+    exit 1
+  fi
 
   local preferred
-  preferred="$(jq -r '.layout_info | to_entries | max_by(.value["1"]) | .key // empty' <<<"${lookup_resp}")"
+  preferred="$(jq -r 'if type == "object" then ((.layout_info // {}) | to_entries | max_by(.value["1"]) | .key) else empty end // empty' "${lookup_resp_file}" 2>/dev/null || true)"
   if [[ -z "${preferred}" ]]; then
     echo "lookup_probe_error: cannot parse preferred endpoint from lookup response"
+    cat "${lookup_resp_file}"
     exit 1
   fi
 
